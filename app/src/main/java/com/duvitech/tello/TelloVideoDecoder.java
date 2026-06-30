@@ -2,10 +2,10 @@ package com.duvitech.tello;
 
 import android.media.MediaCodec;
 import android.media.MediaFormat;
+import android.media.MediaMuxer;
 import android.util.Log;
 import android.view.Surface;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -22,9 +22,11 @@ public class TelloVideoDecoder extends Thread {
     private Surface surface;
     private volatile boolean running = false;
 
-    // Recording
+    // MP4 recording via MediaMuxer
     private volatile boolean recording = false;
-    private FileOutputStream recordingStream;
+    private MediaMuxer muxer;
+    private int muxerTrackIndex = -1;
+    private long muxerStartUs = -1;
 
     // Snapshot callback
     public interface FrameCallback { void onFrame(byte[] data, int length); }
@@ -48,18 +50,25 @@ public class TelloVideoDecoder extends Thread {
     }
 
     public void startRecording(String path) throws IOException {
-        recordingStream = new FileOutputStream(path);
-        recordingStream.write(SPS);
-        recordingStream.write(PPS);
+        MediaFormat format = MediaFormat.createVideoFormat("video/avc", 960, 720);
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
+        format.setByteBuffer("csd-0", ByteBuffer.wrap(SPS));
+        format.setByteBuffer("csd-1", ByteBuffer.wrap(PPS));
+        muxer = new MediaMuxer(path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+        muxerTrackIndex = muxer.addTrack(format);
+        muxer.start();
+        muxerStartUs = -1;
         recording = true;
         Log.d(TAG, "Recording started: " + path);
     }
 
     public void stopRecording() {
         recording = false;
-        if (recordingStream != null) {
-            try { recordingStream.flush(); recordingStream.close(); } catch (Exception e) { Log.e(TAG, e.getMessage()); }
-            recordingStream = null;
+        if (muxer != null) {
+            try { muxer.stop(); muxer.release(); } catch (Exception e) { Log.e(TAG, "Muxer stop: " + e.getMessage()); }
+            muxer = null;
+            muxerTrackIndex = -1;
+            muxerStartUs = -1;
             Log.d(TAG, "Recording stopped");
         }
     }
@@ -110,11 +119,20 @@ public class TelloVideoDecoder extends Thread {
                 frameLen += len;
 
                 if (len < 1460) {
-                    // write to recording file
-                    if (recording && recordingStream != null) {
-                        try { recordingStream.write(frameBuf, 0, frameLen); } catch (Exception e) { Log.e(TAG, e.getMessage()); }
+                    // MP4 recording
+                    if (recording && muxer != null && muxerTrackIndex >= 0 && containsPicture(frameBuf, frameLen)) {
+                        try {
+                            long nowUs = System.nanoTime() / 1000;
+                            if (muxerStartUs < 0) muxerStartUs = nowUs;
+                            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+                            info.offset = 0;
+                            info.size = frameLen;
+                            info.presentationTimeUs = nowUs - muxerStartUs;
+                            info.flags = isKeyFrame(frameBuf, frameLen) ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0;
+                            muxer.writeSampleData(muxerTrackIndex, ByteBuffer.wrap(frameBuf, 0, frameLen), info);
+                        } catch (Exception e) { Log.e(TAG, "Muxer write: " + e.getMessage()); }
                     }
-                    // snapshot callback (one frame, then clear)
+                    // snapshot callback
                     FrameCallback cb = snapshotCallback;
                     if (cb != null) {
                         byte[] copy = new byte[frameLen];
@@ -146,5 +164,24 @@ public class TelloVideoDecoder extends Thread {
         } catch (Exception e) {
             Log.e(TAG, "Decoder feed error: " + e.getMessage());
         }
+    }
+
+    private boolean isKeyFrame(byte[] data, int length) {
+        for (int i = 0; i < length - 4; i++) {
+            if (data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 1) {
+                if ((data[i+4] & 0x1F) == 5) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsPicture(byte[] data, int length) {
+        for (int i = 0; i < length - 4; i++) {
+            if (data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 1) {
+                int t = data[i+4] & 0x1F;
+                if (t == 1 || t == 5) return true;
+            }
+        }
+        return false;
     }
 }

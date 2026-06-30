@@ -185,6 +185,54 @@
                         android:background="#44000000" />
                 </LinearLayout>
             </LinearLayout>
+
+            <!-- Flip buttons row -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="4dp">
+
+                <Button
+                    android:id="@+id/btnFlipF"
+                    android:layout_width="42dp"
+                    android:layout_height="34dp"
+                    android:text="↑ F"
+                    android:textSize="9sp"
+                    android:textColor="#FFFFFF"
+                    android:background="#44000000"
+                    android:layout_marginEnd="2dp" />
+
+                <Button
+                    android:id="@+id/btnFlipL"
+                    android:layout_width="42dp"
+                    android:layout_height="34dp"
+                    android:text="← L"
+                    android:textSize="9sp"
+                    android:textColor="#FFFFFF"
+                    android:background="#44000000"
+                    android:layout_marginEnd="2dp" />
+
+                <Button
+                    android:id="@+id/btnFlipR"
+                    android:layout_width="42dp"
+                    android:layout_height="34dp"
+                    android:text="→ R"
+                    android:textSize="9sp"
+                    android:textColor="#FFFFFF"
+                    android:background="#44000000"
+                    android:layout_marginEnd="2dp" />
+
+                <Button
+                    android:id="@+id/btnFlipB"
+                    android:layout_width="42dp"
+                    android:layout_height="34dp"
+                    android:text="↓ B"
+                    android:textSize="9sp"
+                    android:textColor="#FFFFFF"
+                    android:background="#44000000" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Right joystick (clean) -->

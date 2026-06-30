@@ -5,6 +5,7 @@ import android.content.ContentValues;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -20,6 +21,10 @@ import android.view.MotionEvent;
 import android.view.PixelCopy;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -67,7 +72,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
+        enterImmersive();
 
         btnVideo    = findViewById(R.id.btnVideo);
         btnSpeed    = findViewById(R.id.btnSpeed);
@@ -95,6 +102,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         btnVideo.setOnClickListener(v -> toggleVideo());
         btnRecord.setOnClickListener(v -> toggleRecording());
         btnPhoto.setOnClickListener(v -> capturePhoto());
+
+        findViewById(R.id.btnFlipF).setOnClickListener(v -> sendCommand("flip f"));
+        findViewById(R.id.btnFlipB).setOnClickListener(v -> sendCommand("flip b"));
+        findViewById(R.id.btnFlipL).setOnClickListener(v -> sendCommand("flip l"));
+        findViewById(R.id.btnFlipR).setOnClickListener(v -> sendCommand("flip r"));
 
         try {
             client = new UDPClient();
@@ -199,7 +211,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             try {
                 String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
                 File dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                File file = new File(dir, "tello_" + ts + ".h264");
+                File file = new File(dir, "tello_" + ts + ".mp4");
                 videoDecoder.startRecording(file.getAbsolutePath());
                 btnRecord.setText("⏹ STOP");
                 Toast.makeText(this, "Recording...", Toast.LENGTH_SHORT).show();
@@ -314,7 +326,32 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         return super.onKeyDown(keyCode, event);
     }
 
-    @Override public void surfaceCreated(SurfaceHolder holder) { Log.d(TAG, "Surface created"); }
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) enterImmersive();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void enterImmersive() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            WindowInsetsController ctrl = getWindow().getInsetsController();
+            if (ctrl != null) {
+                ctrl.hide(WindowInsets.Type.systemBars());
+                ctrl.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+        }
+    }
+
+    @Override public void surfaceCreated(SurfaceHolder holder) {
+        rcHandler.postDelayed(() -> { if (!videoRunning) toggleVideo(); }, 1000);
+    }
     @Override public void surfaceChanged(SurfaceHolder holder, int f, int w, int h) { surfaceHolder = holder; }
     @Override public void surfaceDestroyed(SurfaceHolder holder) {
         if (videoDecoder != null) { videoDecoder.stopDecoding(); videoDecoder = null; videoRunning = false; }
