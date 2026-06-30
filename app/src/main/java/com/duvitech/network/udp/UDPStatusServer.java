@@ -12,7 +12,7 @@ public class UDPStatusServer extends Thread {
     private static final String TAG = "UDPStatusServer";
 
     public interface StatusCallback {
-        void onStatus(String status);
+        void onStatus(String display, int battery, boolean connected);
     }
 
     private DatagramSocket socket;
@@ -23,6 +23,7 @@ public class UDPStatusServer extends Thread {
     public UDPStatusServer(StatusCallback callback) throws SocketException {
         this.callback = callback;
         socket = new DatagramSocket(8890);
+        socket.setSoTimeout(3000);
     }
 
     public void stopServer() {
@@ -38,28 +39,27 @@ public class UDPStatusServer extends Thread {
             try {
                 socket.receive(packet);
                 String data = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8).trim();
-                // Parse battery from status string: "bat:XX;"
-                String display = parseSummary(data);
-                if (callback != null) callback.onStatus(display);
-                Log.d(TAG, data);
+                int bat  = parseInt(extract(data, "bat:"));
+                int h    = parseInt(extract(data, "h:"));
+                String display = "BAT:" + bat + "%  ALT:" + h + "cm";
+                if (callback != null) callback.onStatus(display, bat, true);
+            } catch (java.net.SocketTimeoutException ste) {
+                if (callback != null) callback.onStatus("NOT CONNECTED", 0, false);
             } catch (IOException e) {
                 if (running) Log.e(TAG, e.getMessage());
             }
         }
     }
 
-    private String parseSummary(String data) {
-        String bat = extract(data, "bat:");
-        String h   = extract(data, "h:");
-        String spd = extract(data, "vgx:");
-        return "Bat:" + bat + "%  Alt:" + h + "cm";
-    }
-
     private String extract(String data, String key) {
         int i = data.indexOf(key);
-        if (i < 0) return "?";
+        if (i < 0) return "0";
         int start = i + key.length();
         int end = data.indexOf(';', start);
         return end < 0 ? data.substring(start) : data.substring(start, end);
+    }
+
+    private int parseInt(String s) {
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return 0; }
     }
 }

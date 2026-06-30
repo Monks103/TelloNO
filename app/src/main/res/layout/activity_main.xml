@@ -4,13 +4,12 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
-    <!-- Full-screen video surface -->
     <SurfaceView
         android:id="@+id/surface_video"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Top HUD bar -->
+    <!-- Top HUD -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="40dp"
@@ -18,44 +17,80 @@
         android:background="@color/hudBg"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp">
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp">
 
-        <!-- Left: status -->
+        <!-- Connection dot -->
+        <TextView
+            android:id="@+id/tvConnection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="○"
+            android:textColor="#E74C3C"
+            android:textSize="16sp"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Status text -->
         <TextView
             android:id="@+id/textview_message"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             style="@style/HudText"
-            android:text="● NOT CONNECTED" />
+            android:text="NOT CONNECTED" />
 
-        <!-- Right: speed mode + camera -->
+        <!-- Speed -->
         <Button
             android:id="@+id/btnSpeed"
             android:layout_width="wrap_content"
             android:layout_height="30dp"
             android:text="SPD: MED"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textColor="@color/textAccent"
             android:background="@color/btnFlip"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:layout_marginEnd="8dp" />
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:layout_marginEnd="4dp" />
 
+        <!-- Photo -->
+        <Button
+            android:id="@+id/btnPhoto"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:text="📷"
+            android:textSize="14sp"
+            android:background="@color/btnFlip"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Record -->
+        <Button
+            android:id="@+id/btnRecord"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:text="⏺ REC"
+            android:textSize="10sp"
+            android:textColor="#E74C3C"
+            android:background="@color/btnFlip"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Cam toggle -->
         <Button
             android:id="@+id/btnVideo"
             android:layout_width="wrap_content"
             android:layout_height="30dp"
             android:text="@string/start_video"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textColor="#FFFFFF"
             android:background="@color/btnFlip"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp" />
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
     </LinearLayout>
 
-    <!-- Bottom control overlay -->
+    <!-- Bottom controls -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -68,20 +103,18 @@
         android:paddingStart="8dp"
         android:paddingEnd="8dp">
 
-        <!-- Left block: flip D-pad + left joystick -->
+        <!-- Left: flip D-pad + left joystick -->
         <RelativeLayout
             android:layout_width="0dp"
             android:layout_height="190dp"
             android:layout_weight="1">
 
-            <!-- Left joystick centered -->
             <com.duvitech.tello.JoystickView
                 android:id="@+id/joystickLeft"
                 android:layout_width="150dp"
                 android:layout_height="150dp"
                 android:layout_centerInParent="true" />
 
-            <!-- Flip arrows around left stick -->
             <Button android:id="@+id/btnFlipF"
                 android:layout_width="40dp" android:layout_height="40dp"
                 android:text="▲" style="@style/FlipButton"
@@ -104,44 +137,30 @@
                 android:layout_centerVertical="true" />
         </RelativeLayout>
 
-        <!-- Center: takeoff / land / emergency -->
+        <!-- Center: flight buttons -->
         <LinearLayout
             android:layout_width="120dp"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="center">
 
-            <Button
-                android:id="@+id/btnTakeoff"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="TAKEOFF"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:background="@color/btnTakeoff"
-                android:layout_marginBottom="6dp" />
+            <Button android:id="@+id/btnTakeoff"
+                android:layout_width="match_parent" android:layout_height="48dp"
+                android:text="TAKEOFF" android:textColor="#FFFFFF" android:textSize="12sp"
+                android:background="@color/btnTakeoff" android:layout_marginBottom="6dp" />
 
-            <Button
-                android:id="@+id/btnLand"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="LAND"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:background="@color/btnLand"
-                android:layout_marginBottom="6dp" />
+            <Button android:id="@+id/btnLand"
+                android:layout_width="match_parent" android:layout_height="48dp"
+                android:text="LAND" android:textColor="#FFFFFF" android:textSize="12sp"
+                android:background="@color/btnLand" android:layout_marginBottom="6dp" />
 
-            <Button
-                android:id="@+id/btnEmergency"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:text="STOP"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"
+            <Button android:id="@+id/btnEmergency"
+                android:layout_width="match_parent" android:layout_height="40dp"
+                android:text="STOP" android:textColor="#FFFFFF" android:textSize="11sp"
                 android:background="@color/btnEmergency" />
         </LinearLayout>
 
-        <!-- Right block: right joystick -->
+        <!-- Right joystick -->
         <RelativeLayout
             android:layout_width="0dp"
             android:layout_height="190dp"

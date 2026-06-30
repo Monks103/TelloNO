@@ -1,34 +1,51 @@
 package com.duvitech.tello;
 
 import android.app.Activity;
+import android.content.ContentValues;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.PixelCopy;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.duvitech.network.udp.UDPClient;
 import com.duvitech.network.udp.UDPStatusServer;
 
+import java.io.File;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     private static final String TAG = "TelloDemo";
 
-    private static final int[] SPEEDS     = {30,    60,    100};
-    private static final float[] SCALES   = {0.25f, 0.50f, 1.0f};
+    private static final int[] SPEEDS   = {30,    60,    100};
+    private static final float[] SCALES = {0.25f, 0.50f, 1.0f};
     private static final String[] SPEED_LABELS = {"SPD: LOW", "SPD: MED", "SPD: HIGH"};
-    private int speedIndex = 1; // default medium
+    private int speedIndex = 1;
 
-    private Button btnVideo, btnSpeed;
-    private TextView tvStatus;
+    private Button btnVideo, btnSpeed, btnRecord, btnPhoto;
+    private TextView tvStatus, tvConnection;
+    private SurfaceView surfaceView;
     private boolean videoRunning = false;
 
     private TelloVideoDecoder videoDecoder;
@@ -36,18 +53,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     private UDPStatusServer statusServer;
     private SurfaceHolder surfaceHolder;
 
-    // Touch joystick values (-100 to 100)
     private volatile int touchLX, touchLY, touchRX, touchRY;
-    // Gamepad values
     private volatile int padLX, padLY, padRX, padRY;
+
+    private boolean lowBatteryWarned = false;
 
     private final Handler rcHandler = new Handler(Looper.getMainLooper());
     private final Runnable rcRunnable = new Runnable() {
-        @Override
-        public void run() {
-            sendRc();
-            rcHandler.postDelayed(this, 50);
-        }
+        @Override public void run() { sendRc(); rcHandler.postDelayed(this, 50); }
     };
 
     @Override
@@ -55,41 +68,29 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        btnVideo = findViewById(R.id.btnVideo);
-        btnSpeed = findViewById(R.id.btnSpeed);
-        tvStatus = findViewById(R.id.textview_message);
-
-        SurfaceView sv = findViewById(R.id.surface_video);
-        surfaceHolder = sv.getHolder();
+        btnVideo    = findViewById(R.id.btnVideo);
+        btnSpeed    = findViewById(R.id.btnSpeed);
+        btnRecord   = findViewById(R.id.btnRecord);
+        btnPhoto    = findViewById(R.id.btnPhoto);
+        tvStatus    = findViewById(R.id.textview_message);
+        tvConnection = findViewById(R.id.tvConnection);
+        surfaceView = findViewById(R.id.surface_video);
+        surfaceHolder = surfaceView.getHolder();
         surfaceHolder.addCallback(this);
 
-        // Joysticks
         JoystickView leftStick  = findViewById(R.id.joystickLeft);
         JoystickView rightStick = findViewById(R.id.joystickRight);
         leftStick.setListener((x, y)  -> { touchLX = x; touchLY = y; });
         rightStick.setListener((x, y) -> { touchRX = x; touchRY = y; });
 
-        // Flight buttons
-        findViewById(R.id.btnTakeoff).setOnClickListener(v -> {
-            sendCommand("takeoff");
-            setStatus("● TAKEOFF");
-        });
-        findViewById(R.id.btnLand).setOnClickListener(v -> {
-            sendCommand("land");
-            setStatus("● LANDING");
-        });
-        findViewById(R.id.btnEmergency).setOnClickListener(v -> {
-            sendCommand("emergency");
-            setStatus("⚠ EMERGENCY STOP");
-        });
-
-        // Flip buttons
+        findViewById(R.id.btnTakeoff).setOnClickListener(v -> { sendCommand("takeoff"); setStatus("● TAKEOFF"); });
+        findViewById(R.id.btnLand).setOnClickListener(v -> { sendCommand("land"); setStatus("● LANDING"); });
+        findViewById(R.id.btnEmergency).setOnClickListener(v -> { sendCommand("emergency"); setStatus("⚠ EMERGENCY"); });
         findViewById(R.id.btnFlipF).setOnClickListener(v -> sendCommand("flip f"));
         findViewById(R.id.btnFlipB).setOnClickListener(v -> sendCommand("flip b"));
         findViewById(R.id.btnFlipL).setOnClickListener(v -> sendCommand("flip l"));
         findViewById(R.id.btnFlipR).setOnClickListener(v -> sendCommand("flip r"));
 
-        // Speed cycle
         btnSpeed.setOnClickListener(v -> {
             speedIndex = (speedIndex + 1) % SPEEDS.length;
             btnSpeed.setText(SPEED_LABELS[speedIndex]);
@@ -97,8 +98,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         });
 
         btnVideo.setOnClickListener(v -> toggleVideo());
+        btnRecord.setOnClickListener(v -> toggleRecording());
+        btnPhoto.setOnClickListener(v -> capturePhoto());
 
-        // Connect
         try {
             client = new UDPClient();
             sendCommand("command");
@@ -106,18 +108,44 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             setStatus("● CONNECTED");
         } catch (Exception ex) {
             Log.e(TAG, "Connection error: " + ex.getMessage());
-            setStatus("● JOIN TELLO WIFI");
+            setStatus("JOIN TELLO WIFI");
         }
 
-        // Status telemetry
         try {
-            statusServer = new UDPStatusServer(msg -> runOnUiThread(() -> tvStatus.setText(msg)));
+            statusServer = new UDPStatusServer((display, battery, connected) ->
+                runOnUiThread(() -> updateStatus(display, battery, connected)));
             statusServer.start();
         } catch (Exception e) {
             Log.e(TAG, "Status server: " + e.getMessage());
         }
 
         rcHandler.postDelayed(rcRunnable, 500);
+    }
+
+    private void updateStatus(String display, int battery, boolean connected) {
+        tvStatus.setText(display);
+        if (connected) {
+            tvConnection.setText("●");
+            tvConnection.setTextColor(battery > 20 ? 0xFF2ECC71 : 0xFFE74C3C);
+            // Low battery warning
+            if (battery <= 20 && battery > 0 && !lowBatteryWarned) {
+                lowBatteryWarned = true;
+                setStatus("⚠ LOW BATTERY: " + battery + "%");
+                vibrate(new long[]{0, 300, 100, 300, 100, 300});
+                Toast.makeText(this, "⚠ Low battery! Land soon.", Toast.LENGTH_LONG).show();
+            }
+            if (battery > 25) lowBatteryWarned = false;
+        } else {
+            tvConnection.setText("○");
+            tvConnection.setTextColor(0xFFE74C3C);
+        }
+    }
+
+    private void vibrate(long[] pattern) {
+        Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (v != null && v.hasVibrator()) {
+            v.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        }
     }
 
     private void sendRc() {
@@ -138,24 +166,74 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                 videoDecoder.startDecoding();
                 videoRunning = true;
                 btnVideo.setText(R.string.stop_video);
-            } else {
-                setStatus("Surface not ready");
             }
         } else {
             sendCommand("streamoff");
             if (videoDecoder != null) { videoDecoder.stopDecoding(); videoDecoder = null; }
             videoRunning = false;
             btnVideo.setText(R.string.start_video);
+            btnRecord.setText("⏺ REC");
+        }
+    }
+
+    private void toggleRecording() {
+        if (videoDecoder == null) { Toast.makeText(this, "Start video first", Toast.LENGTH_SHORT).show(); return; }
+        if (videoDecoder.isRecording()) {
+            videoDecoder.stopRecording();
+            btnRecord.setText("⏺ REC");
+            Toast.makeText(this, "Recording saved", Toast.LENGTH_SHORT).show();
+        } else {
+            try {
+                String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+                File dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                File file = new File(dir, "tello_" + ts + ".h264");
+                videoDecoder.startRecording(file.getAbsolutePath());
+                btnRecord.setText("⏹ STOP");
+                Toast.makeText(this, "Recording...", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Record failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void capturePhoto() {
+        if (!videoRunning || surfaceView == null) {
+            Toast.makeText(this, "Start video first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Bitmap bitmap = Bitmap.createBitmap(surfaceView.getWidth(), surfaceView.getHeight(), Bitmap.Config.ARGB_8888);
+        HandlerThread ht = new HandlerThread("PixelCopy");
+        ht.start();
+        PixelCopy.request(surfaceView, bitmap, result -> {
+            if (result == PixelCopy.SUCCESS) saveBitmapToGallery(bitmap);
+            else runOnUiThread(() -> Toast.makeText(this, "Capture failed", Toast.LENGTH_SHORT).show());
+            ht.quitSafely();
+        }, new Handler(ht.getLooper()));
+    }
+
+    private void saveBitmapToGallery(Bitmap bitmap) {
+        try {
+            String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "tello_" + ts + ".jpg");
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/TelloNO");
+            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri != null) {
+                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out);
+                }
+                runOnUiThread(() -> Toast.makeText(this, "📷 Photo saved!", Toast.LENGTH_SHORT).show());
+            }
+        } catch (Exception e) {
+            runOnUiThread(() -> Toast.makeText(this, "Save failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
         }
     }
 
     private void sendCommand(String cmd) {
         if (client != null) {
-            try {
-                client.sendBytes(cmd.getBytes(StandardCharsets.UTF_8));
-            } catch (Exception e) {
-                Log.e(TAG, "CMD error: " + e.getMessage());
-            }
+            try { client.sendBytes(cmd.getBytes(StandardCharsets.UTF_8)); }
+            catch (Exception e) { Log.e(TAG, "CMD: " + e.getMessage()); }
         }
     }
 
@@ -196,8 +274,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     public boolean onGenericMotionEvent(MotionEvent event) {
         if ((event.getSource() & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
                 && event.getAction() == MotionEvent.ACTION_MOVE) {
-            final int historySize = event.getHistorySize();
-            for (int i = 0; i < historySize; i++) processJoystickInput(event, i);
+            for (int i = 0; i < event.getHistorySize(); i++) processJoystickInput(event, i);
             processJoystickInput(event, -1);
             return true;
         }
@@ -209,30 +286,23 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         if ((event.getSource() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
                 && event.getRepeatCount() == 0) {
             switch (keyCode) {
-                case KeyEvent.KEYCODE_BUTTON_L1: sendCommand("takeoff");   setStatus("● TAKEOFF"); return true;
-                case KeyEvent.KEYCODE_BUTTON_R1: sendCommand("land");      setStatus("● LANDING"); return true;
-                case KeyEvent.KEYCODE_BUTTON_A:  toggleVideo();            return true;
-                case KeyEvent.KEYCODE_BUTTON_Y:  sendCommand("flip f");    return true;
-                case KeyEvent.KEYCODE_BUTTON_X:  sendCommand("flip l");    return true;
-                case KeyEvent.KEYCODE_BUTTON_B:  sendCommand("flip r");    return true;
+                case KeyEvent.KEYCODE_BUTTON_L1:     sendCommand("takeoff");   setStatus("● TAKEOFF"); return true;
+                case KeyEvent.KEYCODE_BUTTON_R1:     sendCommand("land");      setStatus("● LANDING"); return true;
+                case KeyEvent.KEYCODE_BUTTON_A:      toggleVideo();            return true;
+                case KeyEvent.KEYCODE_BUTTON_Y:      sendCommand("flip f");    return true;
+                case KeyEvent.KEYCODE_BUTTON_X:      sendCommand("flip l");    return true;
+                case KeyEvent.KEYCODE_BUTTON_B:      sendCommand("flip r");    return true;
+                case KeyEvent.KEYCODE_BUTTON_R2:     capturePhoto();           return true;
+                case KeyEvent.KEYCODE_BUTTON_L2:     toggleRecording();        return true;
                 case KeyEvent.KEYCODE_BUTTON_SELECT: sendCommand("emergency"); return true;
             }
         }
         return super.onKeyDown(keyCode, event);
     }
 
-    // --- Surface callbacks ---
-
     @Override public void surfaceCreated(SurfaceHolder holder) { Log.d(TAG, "Surface created"); }
-
-    @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
-        Log.d(TAG, "Surface: " + w + "x" + h);
-        surfaceHolder = holder;
-    }
-
-    @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
+    @Override public void surfaceChanged(SurfaceHolder holder, int f, int w, int h) { surfaceHolder = holder; }
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
         if (videoDecoder != null) { videoDecoder.stopDecoding(); videoDecoder = null; videoRunning = false; }
     }
 }
