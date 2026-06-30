@@ -13,6 +13,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import com.duvitech.network.udp.UDPClient;
+import com.duvitech.network.udp.UDPStatusServer;
 
 import java.nio.charset.StandardCharsets;
 
@@ -26,6 +27,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     private TelloVideoDecoder videoDecoder;
     private UDPClient client;
+    private UDPStatusServer statusServer;
     private SurfaceHolder surfaceHolder;
 
     @Override
@@ -47,6 +49,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         } catch (Exception ex) {
             Log.e(TAG, "Connection error: " + ex.getMessage());
             setStatus("Connection failed — connect to Tello WiFi first");
+        }
+
+        try {
+            statusServer = new UDPStatusServer(msg -> runOnUiThread(() -> tvStatus.setText(msg)));
+            statusServer.start();
+        } catch (Exception e) {
+            Log.e(TAG, "Status server error: " + e.getMessage());
         }
 
         btnVideo.setOnClickListener(v -> toggleVideo());
@@ -96,6 +105,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     protected void onDestroy() {
         if (videoDecoder != null) videoDecoder.stopDecoding();
+        if (statusServer != null) statusServer.stopServer();
         if (client != null) client.close();
         super.onDestroy();
     }
@@ -128,11 +138,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                 if (hy < 0) sendCommand("flip f");
                 else if (hy > 0) sendCommand("flip b");
             } else {
-                int yaw   = (int)(lx * 100.0);
+                // Tello rc: roll(left/right) pitch(fwd/back) throttle(up/down) yaw
+                int roll     = (int)(rx * 100.0);
+                int pitch    = (int)(ry * -100.0);
                 int throttle = (int)(ly * -100.0);
-                int roll  = (int)(rx * 100.0);
-                int pitch = (int)(ry * -100.0);
-                sendCommand("rc " + yaw + " " + pitch + " " + throttle + " " + roll);
+                int yaw      = (int)(lx * 100.0);
+                sendCommand("rc " + roll + " " + pitch + " " + throttle + " " + yaw);
             }
         }
     }
