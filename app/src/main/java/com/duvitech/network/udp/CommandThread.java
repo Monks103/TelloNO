@@ -18,7 +18,7 @@ public class CommandThread extends Thread {
 
     public CommandThread(InetAddress address, DatagramSocket socket, String msg)  {
         this.address = address;
-        this.msgBytes = msg.getBytes();
+        this.msgBytes = msg.getBytes(StandardCharsets.UTF_8);
         this.socket = socket;
     }
 
@@ -30,27 +30,25 @@ public class CommandThread extends Thread {
 
     @Override
     public void run() {
+        String msgStr = new String(msgBytes, StandardCharsets.UTF_8);
+        Log.d(TAG, "Sending: " + msgStr + " -> " + address + ":" + UDPClient.PORT);
         DatagramPacket packet = new DatagramPacket(msgBytes, msgBytes.length, address, UDPClient.PORT);
         try {
             socket.send(packet);
-            if(String.valueOf(msgBytes).compareTo("command")==0) {
-                byte[] buf = new byte[500];
-                packet = new DatagramPacket(buf, buf.length);
-                socket.setSoTimeout(500);
-                try {
-                    socket.receive(packet);
-                    String doneText = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
-                    Log.d(TAG, "Response: " + doneText);
-                    if (doneText.compareTo("ok") == 0) {
-                        Log.d(TAG, "Connected");
-                    }
-                }catch (SocketTimeoutException ste){
-                    Log.e(TAG, ste.getMessage());
-                }
+            Log.d(TAG, "Sent OK: " + msgStr);
+
+            byte[] buf = new byte[500];
+            DatagramPacket resp = new DatagramPacket(buf, buf.length);
+            socket.setSoTimeout(1000);
+            try {
+                socket.receive(resp);
+                String response = new String(resp.getData(), 0, resp.getLength(), StandardCharsets.UTF_8);
+                Log.d(TAG, "Response to '" + msgStr + "': " + response);
+            } catch (SocketTimeoutException ste) {
+                Log.e(TAG, "No response to '" + msgStr + "' (1s timeout — Tello may not be in range or not in SDK mode)");
             }
         } catch (SocketException se) {
-            Log.e(TAG, se.getMessage());
-
+            Log.e(TAG, "Socket error: " + se.getMessage());
         } catch (IOException e) {
             Log.e(TAG, "Command Error: " + e.getMessage());
         }

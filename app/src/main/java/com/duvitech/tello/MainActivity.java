@@ -79,6 +79,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     private void sendCommand(String cmd) {
         if (client != null) {
             try {
+                Log.d(TAG, "Sending command: " + cmd);
                 client.sendBytes(cmd.getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 Log.e(TAG, "Command error: " + e.getMessage());

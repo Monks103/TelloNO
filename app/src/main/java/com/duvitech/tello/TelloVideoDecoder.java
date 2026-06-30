@@ -74,10 +74,23 @@ public class TelloVideoDecoder extends Thread {
             byte[] frameBuf = new byte[MAX_FRAME_SIZE];
             int frameLen = 0;
 
+            socket.setSoTimeout(3000);
+            Log.d(TAG, "Listening on UDP port " + VIDEO_PORT);
+            int packetCount = 0;
+            int timeoutCount = 0;
             while (running) {
                 DatagramPacket packet = new DatagramPacket(recvBuf, recvBuf.length);
-                socket.receive(packet);
+                try {
+                    socket.receive(packet);
+                } catch (java.net.SocketTimeoutException ste) {
+                    timeoutCount++;
+                    Log.d(TAG, "Still waiting... timeout #" + timeoutCount + " (no data on port 11111)");
+                    continue;
+                }
                 int len = packet.getLength();
+                packetCount++;
+                if (packetCount <= 5 || packetCount % 100 == 0)
+                    Log.d(TAG, "Packet #" + packetCount + " len=" + len + " from=" + packet.getAddress());
 
                 if (frameLen + len > MAX_FRAME_SIZE) {
                     frameLen = 0;
