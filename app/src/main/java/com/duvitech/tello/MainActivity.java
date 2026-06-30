@@ -57,6 +57,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     private volatile int padLX, padLY, padRX, padRY;
 
     private boolean lowBatteryWarned = false;
+    private boolean isArmed = false;
 
     private final Handler rcHandler = new Handler(Looper.getMainLooper());
     private final Runnable rcRunnable = new Runnable() {
@@ -84,18 +85,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         rightStick.setListener((x, y) -> { touchRX = x; touchRY = y; });
 
         findViewById(R.id.btnTakeoff).setOnClickListener(v -> { sendCommand("takeoff"); setStatus("● TAKEOFF"); });
-        findViewById(R.id.btnLand).setOnClickListener(v -> { sendCommand("land"); setStatus("● LANDING"); });
-        findViewById(R.id.btnEmergency).setOnClickListener(v -> { sendCommand("emergency"); setStatus("⚠ EMERGENCY"); });
-        findViewById(R.id.btnFlipF).setOnClickListener(v -> sendCommand("flip f"));
-        findViewById(R.id.btnFlipB).setOnClickListener(v -> sendCommand("flip b"));
-        findViewById(R.id.btnFlipL).setOnClickListener(v -> sendCommand("flip l"));
-        findViewById(R.id.btnFlipR).setOnClickListener(v -> sendCommand("flip r"));
+        findViewById(R.id.btnLand).setOnClickListener(v -> { sendCommand("land"); setStatus("● LANDING"); isArmed = false; });
+        findViewById(R.id.btnEmergency).setOnClickListener(v -> { sendCommand("emergency"); setStatus("⚠ EMERGENCY"); isArmed = false; });
 
-        btnSpeed.setOnClickListener(v -> {
-            speedIndex = (speedIndex + 1) % SPEEDS.length;
-            btnSpeed.setText(SPEED_LABELS[speedIndex]);
-            sendCommand("speed " + SPEEDS[speedIndex]);
-        });
+        btnSpeed.setOnClickListener(v -> cycleSpeed(1));
+        findViewById(R.id.btnSpeedUp).setOnClickListener(v -> cycleSpeed(1));
+        findViewById(R.id.btnSpeedDown).setOnClickListener(v -> cycleSpeed(-1));
 
         btnVideo.setOnClickListener(v -> toggleVideo());
         btnRecord.setOnClickListener(v -> toggleRecording());
@@ -156,6 +151,24 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         int yaw      = (int)((padLX != 0 ? padLX : touchLX) * s);
         if (roll == 0 && pitch == 0 && throttle == 0 && yaw == 0) return;
         sendCommand("rc " + roll + " " + pitch + " " + throttle + " " + yaw);
+    }
+
+    private void armSafety() {
+        if (!isArmed) {
+            sendCommand("command");
+            isArmed = true;
+            setStatus("✓ ARMED — ready for takeoff");
+            vibrate(new long[]{0, 100, 50, 100});
+        } else {
+            setStatus("✓ ARMED — props ready");
+        }
+    }
+
+    private void cycleSpeed(int dir) {
+        speedIndex = Math.max(0, Math.min(SPEEDS.length - 1, speedIndex + dir));
+        btnSpeed.setText(SPEED_LABELS[speedIndex]);
+        sendCommand("speed " + SPEEDS[speedIndex]);
+        setStatus("Speed: " + SPEED_LABELS[speedIndex]);
     }
 
     private void toggleVideo() {
@@ -286,15 +299,16 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         if ((event.getSource() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
                 && event.getRepeatCount() == 0) {
             switch (keyCode) {
-                case KeyEvent.KEYCODE_BUTTON_L1:     sendCommand("takeoff");   setStatus("● TAKEOFF"); return true;
-                case KeyEvent.KEYCODE_BUTTON_R1:     sendCommand("land");      setStatus("● LANDING"); return true;
+                case KeyEvent.KEYCODE_BUTTON_L2:     sendCommand("takeoff");   setStatus("● TAKEOFF"); return true;
+                case KeyEvent.KEYCODE_BUTTON_L1:     sendCommand("land");      setStatus("● LANDING"); isArmed = false; return true;
+                case KeyEvent.KEYCODE_BUTTON_R1:     toggleRecording();        return true;
+                case KeyEvent.KEYCODE_BUTTON_R2:     capturePhoto();           return true;
+                case KeyEvent.KEYCODE_BUTTON_START:  armSafety();              return true;
                 case KeyEvent.KEYCODE_BUTTON_A:      toggleVideo();            return true;
                 case KeyEvent.KEYCODE_BUTTON_Y:      sendCommand("flip f");    return true;
                 case KeyEvent.KEYCODE_BUTTON_X:      sendCommand("flip l");    return true;
                 case KeyEvent.KEYCODE_BUTTON_B:      sendCommand("flip r");    return true;
-                case KeyEvent.KEYCODE_BUTTON_R2:     capturePhoto();           return true;
-                case KeyEvent.KEYCODE_BUTTON_L2:     toggleRecording();        return true;
-                case KeyEvent.KEYCODE_BUTTON_SELECT: sendCommand("emergency"); return true;
+                case KeyEvent.KEYCODE_BUTTON_SELECT: sendCommand("emergency"); isArmed = false; return true;
             }
         }
         return super.onKeyDown(keyCode, event);
