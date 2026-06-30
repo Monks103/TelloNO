@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -14,15 +16,18 @@ public class JoystickView extends View {
         void onMove(int x, int y); // -100 to 100
     }
 
-    private final Paint outerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint thumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint crossPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ringPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint crossPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint thumbPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint glowPaint    = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint arrowPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private float cx, cy;       // center
-    private float thumbX, thumbY; // current thumb position
+    private float cx, cy;
+    private float thumbX, thumbY;
     private float outerRadius;
     private float thumbRadius;
     private int activePointerId = -1;
+    private boolean touched = false;
 
     private JoystickListener listener;
 
@@ -37,21 +42,29 @@ public class JoystickView extends View {
     }
 
     private void init() {
-        outerPaint.setStyle(Paint.Style.STROKE);
-        outerPaint.setColor(Color.argb(120, 255, 255, 255));
-        outerPaint.setStrokeWidth(3f);
-
-        thumbPaint.setStyle(Paint.Style.FILL);
-        thumbPaint.setColor(Color.argb(180, 255, 255, 255));
+        ringPaint.setStyle(Paint.Style.STROKE);
+        ringPaint.setColor(Color.argb(120, 0, 212, 255));
+        ringPaint.setStrokeWidth(2.5f);
 
         crossPaint.setStyle(Paint.Style.STROKE);
-        crossPaint.setColor(Color.argb(60, 255, 255, 255));
-        crossPaint.setStrokeWidth(2f);
+        crossPaint.setColor(Color.argb(50, 0, 212, 255));
+        crossPaint.setStrokeWidth(1.5f);
+
+        glowPaint.setStyle(Paint.Style.STROKE);
+        glowPaint.setColor(Color.argb(60, 0, 212, 255));
+        glowPaint.setStrokeWidth(12f);
+        glowPaint.setMaskFilter(null);
+
+        thumbPaint.setStyle(Paint.Style.FILL);
+
+        arrowPaint.setStyle(Paint.Style.FILL);
+        arrowPaint.setColor(Color.argb(80, 0, 212, 255));
+        arrowPaint.setTextSize(18f);
+        arrowPaint.setTextAlign(Paint.Align.CENTER);
+        arrowPaint.setAntiAlias(true);
     }
 
-    public void setListener(JoystickListener l) {
-        this.listener = l;
-    }
+    public void setListener(JoystickListener l) { this.listener = l; }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldW, int oldH) {
@@ -59,19 +72,43 @@ public class JoystickView extends View {
         cy = h / 2f;
         thumbX = cx;
         thumbY = cy;
-        outerRadius = Math.min(w, h) / 2f - 8f;
-        thumbRadius = outerRadius * 0.35f;
+        outerRadius = Math.min(w, h) / 2f - 12f;
+        thumbRadius = outerRadius * 0.30f;
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
-        // crosshair
+        // outer glow ring
+        canvas.drawCircle(cx, cy, outerRadius, glowPaint);
+        // outer ring
+        canvas.drawCircle(cx, cy, outerRadius, ringPaint);
+        // inner ring
+        canvas.drawCircle(cx, cy, outerRadius * 0.5f, crossPaint);
+        // crosshair lines
         canvas.drawLine(cx - outerRadius, cy, cx + outerRadius, cy, crossPaint);
         canvas.drawLine(cx, cy - outerRadius, cx, cy + outerRadius, crossPaint);
-        // outer ring
-        canvas.drawCircle(cx, cy, outerRadius, outerPaint);
-        // thumb
+
+        // directional arrow hints
+        float ao = outerRadius * 0.78f;
+        canvas.drawText("▲", cx, cy - ao + 8, arrowPaint);
+        canvas.drawText("▼", cx, cy + ao + 6, arrowPaint);
+        canvas.drawText("◀", cx - ao + 6, cy + 6, arrowPaint);
+        canvas.drawText("▶", cx + ao - 2, cy + 6, arrowPaint);
+
+        // thumb with radial gradient (lit when touched)
+        int centerColor = touched ? Color.argb(230, 0, 212, 255) : Color.argb(160, 0, 160, 200);
+        int edgeColor   = touched ? Color.argb(100, 0, 100, 180) : Color.argb(60, 0, 80, 120);
+        RadialGradient gradient = new RadialGradient(
+                thumbX, thumbY, thumbRadius,
+                centerColor, edgeColor,
+                Shader.TileMode.CLAMP);
+        thumbPaint.setShader(gradient);
         canvas.drawCircle(thumbX, thumbY, thumbRadius, thumbPaint);
+
+        // thumb outline
+        ringPaint.setAlpha(touched ? 200 : 100);
+        canvas.drawCircle(thumbX, thumbY, thumbRadius, ringPaint);
+        ringPaint.setAlpha(120);
     }
 
     @Override
@@ -80,6 +117,7 @@ public class JoystickView extends View {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_POINTER_DOWN:
                 activePointerId = event.getPointerId(event.getActionIndex());
+                touched = true;
                 updateThumb(event);
                 return true;
             case MotionEvent.ACTION_MOVE:
@@ -107,15 +145,15 @@ public class JoystickView extends View {
         thumbX = cx + dx;
         thumbY = cy + dy;
         invalidate();
-        if (listener != null) {
+        if (listener != null)
             listener.onMove((int)(dx / outerRadius * 100), (int)(dy / outerRadius * 100));
-        }
     }
 
     private void reset() {
         thumbX = cx;
         thumbY = cy;
         activePointerId = -1;
+        touched = false;
         invalidate();
         if (listener != null) listener.onMove(0, 0);
     }

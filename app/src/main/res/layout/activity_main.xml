@@ -2,9 +2,9 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000">
+    android:background="@android:color/black">
 
-    <!-- Video surface fills the screen -->
+    <!-- Full-screen video surface -->
     <SurfaceView
         android:id="@+id/surface_video"
         android:layout_width="match_parent"
@@ -13,74 +13,147 @@
     <!-- Top HUD bar -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="40dp"
+        android:layout_gravity="top"
+        android:background="@color/hudBg"
         android:orientation="horizontal"
-        android:padding="8dp"
         android:gravity="center_vertical"
-        android:background="#66000000">
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
 
+        <!-- Left: status -->
         <TextView
             android:id="@+id/textview_message"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:text="Connecting..." />
+            style="@style/HudText"
+            android:text="● NOT CONNECTED" />
+
+        <!-- Right: speed mode + camera -->
+        <Button
+            android:id="@+id/btnSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:text="SPD: MED"
+            android:textSize="11sp"
+            android:textColor="@color/textAccent"
+            android:background="@color/btnFlip"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:layout_marginEnd="8dp" />
 
         <Button
             android:id="@+id/btnVideo"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="30dp"
             android:text="@string/start_video"
-            android:textSize="12sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp" />
+            android:textSize="11sp"
+            android:textColor="#FFFFFF"
+            android:background="@color/btnFlip"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
     </LinearLayout>
 
-    <!-- Bottom controls overlay -->
+    <!-- Bottom control overlay -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="180dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="bottom"
+        android:background="@color/controlBg"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="8dp"
-        android:background="#44000000">
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
 
-        <!-- Left joystick: throttle + yaw -->
-        <com.duvitech.tello.JoystickView
-            android:id="@+id/joystickLeft"
-            android:layout_width="160dp"
-            android:layout_height="160dp" />
-
-        <!-- Center buttons -->
-        <LinearLayout
+        <!-- Left block: flip D-pad + left joystick -->
+        <RelativeLayout
             android:layout_width="0dp"
+            android:layout_height="190dp"
+            android:layout_weight="1">
+
+            <!-- Left joystick centered -->
+            <com.duvitech.tello.JoystickView
+                android:id="@+id/joystickLeft"
+                android:layout_width="150dp"
+                android:layout_height="150dp"
+                android:layout_centerInParent="true" />
+
+            <!-- Flip arrows around left stick -->
+            <Button android:id="@+id/btnFlipF"
+                android:layout_width="40dp" android:layout_height="40dp"
+                android:text="▲" style="@style/FlipButton"
+                android:layout_centerHorizontal="true"
+                android:layout_alignParentTop="true" />
+            <Button android:id="@+id/btnFlipB"
+                android:layout_width="40dp" android:layout_height="40dp"
+                android:text="▼" style="@style/FlipButton"
+                android:layout_centerHorizontal="true"
+                android:layout_alignParentBottom="true" />
+            <Button android:id="@+id/btnFlipL"
+                android:layout_width="40dp" android:layout_height="40dp"
+                android:text="◀" style="@style/FlipButton"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true" />
+            <Button android:id="@+id/btnFlipR"
+                android:layout_width="40dp" android:layout_height="40dp"
+                android:text="▶" style="@style/FlipButton"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true" />
+        </RelativeLayout>
+
+        <!-- Center: takeoff / land / emergency -->
+        <LinearLayout
+            android:layout_width="120dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center">
 
             <Button
                 android:id="@+id/btnTakeoff"
-                android:layout_width="100dp"
-                android:layout_height="wrap_content"
-                android:text="Takeoff"
-                android:layout_marginBottom="8dp" />
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="TAKEOFF"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@color/btnTakeoff"
+                android:layout_marginBottom="6dp" />
 
             <Button
                 android:id="@+id/btnLand"
-                android:layout_width="100dp"
-                android:layout_height="wrap_content"
-                android:text="Land" />
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="LAND"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@color/btnLand"
+                android:layout_marginBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnEmergency"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:text="STOP"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="@color/btnEmergency" />
         </LinearLayout>
 
-        <!-- Right joystick: roll + pitch -->
-        <com.duvitech.tello.JoystickView
-            android:id="@+id/joystickRight"
-            android:layout_width="160dp"
-            android:layout_height="160dp" />
+        <!-- Right block: right joystick -->
+        <RelativeLayout
+            android:layout_width="0dp"
+            android:layout_height="190dp"
+            android:layout_weight="1">
+
+            <com.duvitech.tello.JoystickView
+                android:id="@+id/joystickRight"
+                android:layout_width="150dp"
+                android:layout_height="150dp"
+                android:layout_centerInParent="true" />
+        </RelativeLayout>
+
     </LinearLayout>
 
 </FrameLayout>
