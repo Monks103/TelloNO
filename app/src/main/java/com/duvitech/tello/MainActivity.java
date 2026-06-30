@@ -22,7 +22,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     private static final String TAG = "TelloDemo";
 
-    private static final int[] SPEEDS = {30, 60, 100};
+    private static final int[] SPEEDS     = {30,    60,    100};
+    private static final float[] SCALES   = {0.25f, 0.50f, 1.0f};
     private static final String[] SPEED_LABELS = {"SPD: LOW", "SPD: MED", "SPD: HIGH"};
     private int speedIndex = 1; // default medium
 
@@ -120,10 +121,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     private void sendRc() {
-        int roll     = padRX != 0 ? padRX : touchRX;
-        int pitch    = padRY != 0 ? -padRY : -touchRY;
-        int throttle = padLY != 0 ? -padLY : -touchLY;
-        int yaw      = padLX != 0 ? padLX : touchLX;
+        float s = SCALES[speedIndex];
+        int roll     = (int)((padRX != 0 ? padRX : touchRX) * s);
+        int pitch    = (int)((padRY != 0 ? -padRY : -touchRY) * s);
+        int throttle = (int)((padLY != 0 ? -padLY : -touchLY) * s);
+        int yaw      = (int)((padLX != 0 ? padLX : touchLX) * s);
         if (roll == 0 && pitch == 0 && throttle == 0 && yaw == 0) return;
         sendCommand("rc " + roll + " " + pitch + " " + throttle + " " + yaw);
     }
