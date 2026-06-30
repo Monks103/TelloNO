@@ -1,37 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:gravity="center_vertical"
-    android:orientation="vertical"
-    tools:context=".MainActivity">
+    android:background="#000">
 
-    <TextView
-        android:id="@+id/textview_message"
+    <!-- Video surface fills the screen -->
+    <SurfaceView
+        android:id="@+id/surface_video"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:gravity="center_horizontal" />
+        android:layout_height="match_parent" />
+
+    <!-- Top HUD bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:gravity="center_horizontal"
-        android:orientation="horizontal" >
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:gravity="center_vertical"
+        android:background="#66000000">
+
+        <TextView
+            android:id="@+id/textview_message"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:text="Connecting..." />
 
         <Button
             android:id="@+id/btnVideo"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/start" />
+            android:layout_height="36dp"
+            android:text="@string/start_video"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
     </LinearLayout>
 
-    <SurfaceView
-        android:id="@+id/surface_video"
+    <!-- Bottom controls overlay -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center_vertical|center_horizontal"
-        android:layout_marginTop="2dp" />
-</LinearLayout>
+        android:layout_height="180dp"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#44000000">
+
+        <!-- Left joystick: throttle + yaw -->
+        <com.duvitech.tello.JoystickView
+            android:id="@+id/joystickLeft"
+            android:layout_width="160dp"
+            android:layout_height="160dp" />
+
+        <!-- Center buttons -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <Button
+                android:id="@+id/btnTakeoff"
+                android:layout_width="100dp"
+                android:layout_height="wrap_content"
+                android:text="Takeoff"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnLand"
+                android:layout_width="100dp"
+                android:layout_height="wrap_content"
+                android:text="Land" />
+        </LinearLayout>
+
+        <!-- Right joystick: roll + pitch -->
+        <com.duvitech.tello.JoystickView
+            android:id="@+id/joystickRight"
+            android:layout_width="160dp"
+            android:layout_height="160dp" />
+    </LinearLayout>
+
+</FrameLayout>

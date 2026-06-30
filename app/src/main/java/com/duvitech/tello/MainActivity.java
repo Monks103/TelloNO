@@ -2,6 +2,8 @@ package com.duvitech.tello;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -30,6 +32,23 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     private UDPStatusServer statusServer;
     private SurfaceHolder surfaceHolder;
 
+    // Joystick values from touch controls (-100 to 100)
+    private int touchLX = 0, touchLY = 0; // left stick: yaw, throttle
+    private int touchRX = 0, touchRY = 0; // right stick: roll, pitch
+
+    // Gamepad values (-100 to 100)
+    private int padLX = 0, padLY = 0;
+    private int padRX = 0, padRY = 0;
+
+    private final Handler rcHandler = new Handler(Looper.getMainLooper());
+    private final Runnable rcRunnable = new Runnable() {
+        @Override
+        public void run() {
+            sendRc();
+            rcHandler.postDelayed(this, 50); // 20 Hz
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -42,13 +61,38 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         surfaceHolder = sv.getHolder();
         surfaceHolder.addCallback(this);
 
+        // Joysticks
+        JoystickView leftStick = findViewById(R.id.joystickLeft);
+        JoystickView rightStick = findViewById(R.id.joystickRight);
+
+        leftStick.setListener((x, y) -> {
+            touchLX = x;   // yaw
+            touchLY = y;   // throttle (inverted below)
+        });
+        rightStick.setListener((x, y) -> {
+            touchRX = x;   // roll
+            touchRY = y;   // pitch (inverted below)
+        });
+
+        // Takeoff / Land buttons
+        findViewById(R.id.btnTakeoff).setOnClickListener(v -> {
+            sendCommand("takeoff");
+            setStatus("Taking off...");
+        });
+        findViewById(R.id.btnLand).setOnClickListener(v -> {
+            sendCommand("land");
+            setStatus("Landing...");
+        });
+
+        btnVideo.setOnClickListener(v -> toggleVideo());
+
         try {
             client = new UDPClient();
             sendCommand("command");
             setStatus("Connected to Tello");
         } catch (Exception ex) {
             Log.e(TAG, "Connection error: " + ex.getMessage());
-            setStatus("Connection failed — connect to Tello WiFi first");
+            setStatus("Not connected — join Tello WiFi first");
         }
 
         try {
@@ -58,7 +102,17 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             Log.e(TAG, "Status server error: " + e.getMessage());
         }
 
-        btnVideo.setOnClickListener(v -> toggleVideo());
+        rcHandler.postDelayed(rcRunnable, 500);
+    }
+
+    private void sendRc() {
+        // Gamepad takes priority over touch if non-zero
+        int roll     = padRX != 0 ? padRX : touchRX;
+        int pitch    = padRY != 0 ? -padRY : -touchRY;
+        int throttle = padLY != 0 ? -padLY : -touchLY;
+        int yaw      = padLX != 0 ? padLX : touchLX;
+        if (roll == 0 && pitch == 0 && throttle == 0 && yaw == 0) return;
+        sendCommand("rc " + roll + " " + pitch + " " + throttle + " " + yaw);
     }
 
     private void toggleVideo() {
@@ -69,7 +123,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                 videoDecoder.startDecoding();
                 videoRunning = true;
                 btnVideo.setText(R.string.stop_video);
-                setStatus("Video streaming");
             } else {
                 setStatus("Surface not ready");
             }
@@ -81,14 +134,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             }
             videoRunning = false;
             btnVideo.setText(R.string.start_video);
-            setStatus("Video stopped");
         }
     }
 
     private void sendCommand(String cmd) {
         if (client != null) {
             try {
-                Log.d(TAG, "Sending command: " + cmd);
+                Log.d(TAG, "CMD: " + cmd);
                 client.sendBytes(cmd.getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 Log.e(TAG, "Command error: " + e.getMessage());
@@ -97,13 +149,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     private void setStatus(final String msg) {
-        runOnUiThread(() -> {
-            if (tvStatus != null) tvStatus.setText(msg);
-        });
+        runOnUiThread(() -> { if (tvStatus != null) tvStatus.setText(msg); });
     }
 
     @Override
     protected void onDestroy() {
+        rcHandler.removeCallbacks(rcRunnable);
         if (videoDecoder != null) videoDecoder.stopDecoding();
         if (statusServer != null) statusServer.stopServer();
         if (client != null) client.close();
@@ -123,29 +174,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     private void processJoystickInput(MotionEvent event, int historyPos) {
-        InputDevice inputDevice = event.getDevice();
-        float lx = getCenteredAxis(event, inputDevice, MotionEvent.AXIS_X, historyPos);
-        float ly = getCenteredAxis(event, inputDevice, MotionEvent.AXIS_Y, historyPos);
-        float rx = getCenteredAxis(event, inputDevice, MotionEvent.AXIS_Z, historyPos);
-        float ry = getCenteredAxis(event, inputDevice, MotionEvent.AXIS_RZ, historyPos);
-        float hx = getCenteredAxis(event, inputDevice, MotionEvent.AXIS_HAT_X, historyPos);
-        float hy = getCenteredAxis(event, inputDevice, MotionEvent.AXIS_HAT_Y, historyPos);
-
-        if (client != null) {
-            if (hx != 0 || hy != 0) {
-                if (hx > 0) sendCommand("flip r");
-                else if (hx < 0) sendCommand("flip l");
-                if (hy < 0) sendCommand("flip f");
-                else if (hy > 0) sendCommand("flip b");
-            } else {
-                // Tello rc: roll(left/right) pitch(fwd/back) throttle(up/down) yaw
-                int roll     = (int)(rx * 100.0);
-                int pitch    = (int)(ry * -100.0);
-                int throttle = (int)(ly * -100.0);
-                int yaw      = (int)(lx * 100.0);
-                sendCommand("rc " + roll + " " + pitch + " " + throttle + " " + yaw);
-            }
-        }
+        InputDevice dev = event.getDevice();
+        padLX = (int)(getCenteredAxis(event, dev, MotionEvent.AXIS_X, historyPos) * 100);
+        padLY = (int)(getCenteredAxis(event, dev, MotionEvent.AXIS_Y, historyPos) * 100);
+        padRX = (int)(getCenteredAxis(event, dev, MotionEvent.AXIS_Z, historyPos) * 100);
+        padRY = (int)(getCenteredAxis(event, dev, MotionEvent.AXIS_RZ, historyPos) * 100);
     }
 
     @Override
@@ -167,11 +200,11 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             switch (keyCode) {
                 case KeyEvent.KEYCODE_BUTTON_L1:
                     sendCommand("takeoff");
-                    setStatus("Taking off");
+                    setStatus("Taking off...");
                     return true;
                 case KeyEvent.KEYCODE_BUTTON_R1:
                     sendCommand("land");
-                    setStatus("Landing");
+                    setStatus("Landing...");
                     return true;
                 case KeyEvent.KEYCODE_BUTTON_A:
                     toggleVideo();
