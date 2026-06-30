@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Drone arms (X configuration, white) -->
+    <path android:fillColor="#00000000"
+        android:pathData="M46,46 L28,28"
+        android:strokeColor="#CCFFFFFF" android:strokeWidth="4" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M62,46 L80,28"
+        android:strokeColor="#CCFFFFFF" android:strokeWidth="4" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M46,62 L28,80"
+        android:strokeColor="#CCFFFFFF" android:strokeWidth="4" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M62,62 L80,80"
+        android:strokeColor="#CCFFFFFF" android:strokeWidth="4" android:strokeLineCap="round"/>
+
+    <!-- Propeller rings (cyan) -->
+    <path android:fillColor="#00000000"
+        android:pathData="M28,28m-11,0a11,11 0 1,0 22,0a11,11 0 1,0 -22,0"
+        android:strokeColor="#CC00D4FF" android:strokeWidth="3"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M80,28m-11,0a11,11 0 1,0 22,0a11,11 0 1,0 -22,0"
+        android:strokeColor="#CC00D4FF" android:strokeWidth="3"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M28,80m-11,0a11,11 0 1,0 22,0a11,11 0 1,0 -22,0"
+        android:strokeColor="#CC00D4FF" android:strokeWidth="3"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M80,80m-11,0a11,11 0 1,0 22,0a11,11 0 1,0 -22,0"
+        android:strokeColor="#CC00D4FF" android:strokeWidth="3"/>
+
+    <!-- Propeller cross marks (white) -->
+    <path android:fillColor="#00000000" android:pathData="M22,28 L34,28" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M28,22 L28,34" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M74,28 L86,28" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M80,22 L80,34" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M22,80 L34,80" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M28,74 L28,86" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M74,80 L86,80" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+    <path android:fillColor="#00000000" android:pathData="M80,74 L80,86" android:strokeColor="#99FFFFFF" android:strokeWidth="2" android:strokeLineCap="round"/>
+
+    <!-- Drone body (rounded rect, dark with cyan border) -->
+    <path android:fillColor="#2A2A4E"
+        android:pathData="M44,44 Q44,42 46,42 L62,42 Q64,42 64,44 L64,64 Q64,66 62,66 L46,66 Q44,66 44,64 Z"/>
+    <path android:fillColor="#00000000"
+        android:pathData="M44,44 Q44,42 46,42 L62,42 Q64,42 64,44 L64,64 Q64,66 62,66 L46,66 Q44,66 44,64 Z"
+        android:strokeColor="#8800D4FF" android:strokeWidth="1.5"/>
+
+    <!-- Camera lens (center dot, cyan) -->
+    <path android:fillColor="#00D4FF"
+        android:pathData="M54,54m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0"/>
+    <path android:fillColor="#1A1A2E"
+        android:pathData="M54,54m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0"/>
+
+</vector>
