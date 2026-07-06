@@ -3,20 +3,25 @@
 TelloNO companion — fly Tello from laptop with an 8BitDo (or any pygame joystick).
 
 Usage:
-    pip install djitellopy pygame
+    pip install djitellopy pygame opencv-python
     Connect laptop to Tello WiFi, then:
     python3 tello_companion.py
+
+    If your gamepad's buttons don't match the actions below, run:
+    python3 tello_companion.py --discover
+    to print raw button/axis indices as you press things, then add a
+    profile for it in CONTROLLER_PROFILES.
 
 Gamepad mapping (matches TelloNO Android app):
     Left stick     → throttle (Y) + yaw (X)
     Right stick    → roll (X) + pitch (Y)
     L2 trigger     → takeoff
     L1 bumper      → land
-    R1 bumper      → photo (screenshot saved to ./photos/)
-    R2 trigger     → toggle recording (.mp4 saved to ./recordings/)
+    R1 bumper      → toggle recording (.mp4 saved to ./recordings/)
+    R2 trigger     → photo (screenshot saved to ./photos/)
     Start          → arm  (sends 'command' to enter SDK mode)
     Select         → emergency stop
-    A              → toggle video stream display window
+    A              → toggle live video display window
     Y / X / B      → flip forward / left / right
 """
 
@@ -36,15 +41,41 @@ try:
 except ImportError:
     sys.exit("Install djitellopy:  pip install djitellopy")
 
+try:
+    import cv2
+except ImportError:
+    sys.exit("Install opencv-python:  pip install opencv-python")
+
 # ── constants ────────────────────────────────────────────────────────────────
 
-DEADZONE     = 0.12    # ignore stick values below this
-RC_HZ        = 20      # RC command rate
-SPEED_STEPS  = [30, 60, 100]
-SPEED_LABELS = ["LOW", "MED", "HIGH"]
+DEADZONE       = 0.12    # ignore stick/trigger-axis values below this
+TRIGGER_THRESH = 0.5     # axis value that counts as "trigger pulled" for axis-based L2/R2
+RC_HZ          = 20      # RC command rate
+SPEED_STEPS    = [30, 60, 100]
+SPEED_LABELS   = ["LOW", "MED", "HIGH"]
 
 PHOTOS_DIR     = "photos"
 RECORDINGS_DIR = "recordings"
+VIDEO_WINDOW   = "TelloNO"
+
+# Per-controller button/axis layout. Match is by substring of joy.get_name()
+# (lowercased). Add a profile here after running `--discover` on a new pad.
+#
+# "buttons"      — action -> raw button index (JOYBUTTONDOWN.button)
+# "trigger_axes" — action -> raw axis index, for pads that report L2/R2 as
+#                  analog axes instead of digital buttons (common on XInput
+#                  pads with analog triggers; not all pads do this)
+CONTROLLER_PROFILES = {
+    "8bitdo": {
+        "buttons": {
+            "start": 9, "select": 8,
+            "l1": 4, "r1": 5, "l2": 6, "r2": 7,
+            "a": 0, "b": 1, "x": 2, "y": 3,
+        },
+        "trigger_axes": {},
+    },
+}
+DEFAULT_PROFILE_NAME = "8bitdo"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,18 +88,57 @@ def ts():
 def clamp(v, lo=-100, hi=100):
     return max(lo, min(hi, int(v)))
 
+def pick_profile(pad_name):
+    name = pad_name.lower()
+    for key, profile in CONTROLLER_PROFILES.items():
+        if key in name:
+            return key, profile
+    return None, CONTROLLER_PROFILES[DEFAULT_PROFILE_NAME]
+
+def discover_buttons():
+    """Standalone mode: print raw button/axis indices as you press things.
+    No Tello connection needed — use this to work out a new CONTROLLER_PROFILES entry."""
+    pygame.init()
+    pygame.joystick.init()
+    if pygame.joystick.get_count() == 0:
+        sys.exit("No gamepad found — plug it in and retry.")
+
+    joy = pygame.joystick.Joystick(0)
+    joy.init()
+    print(f"Gamepad: {joy.get_name()}")
+    print("Press buttons / move sticks & triggers. Ctrl+C to quit.\n")
+
+    try:
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.JOYBUTTONDOWN:
+                    print(f"button down: {event.button}")
+                elif event.type == pygame.JOYHATMOTION:
+                    print(f"hat: {event.value}")
+                elif event.type == pygame.JOYAXISMOTION:
+                    if abs(event.value) > 0.5:
+                        print(f"axis {event.axis}: {event.value:+.2f}")
+            time.sleep(1 / 60)
+    except KeyboardInterrupt:
+        print("\nDone.")
+    finally:
+        pygame.quit()
+
 # ── main class ───────────────────────────────────────────────────────────────
 
 class TelloCompanion:
     def __init__(self):
-        self.tello        = Tello()
-        self.armed        = False
-        self.flying       = False
-        self.recording    = False
-        self.speed_idx    = 1            # MED by default
-        self.rc           = [0, 0, 0, 0] # roll pitch throttle yaw
-        self._rc_stop     = threading.Event()
-        self._rec_thread  = None
+        self.tello         = Tello()
+        self.armed         = False
+        self.flying        = False
+        self.recording     = False
+        self.video_display = False
+        self.speed_idx     = 1            # MED by default
+        self.rc            = [0, 0, 0, 0] # roll pitch throttle yaw
+        self._rc_stop      = threading.Event()
+        self._rec_thread   = None
+        self._frame_reader = None
+        self._trigger_prev = {}           # action -> was-pulled bool, for axis-based triggers
 
         os.makedirs(PHOTOS_DIR, exist_ok=True)
         os.makedirs(RECORDINGS_DIR, exist_ok=True)
@@ -127,14 +197,13 @@ class TelloCompanion:
         self.tello.set_speed(spd)
         print(f"Speed: {SPEED_LABELS[self.speed_idx]} ({spd})")
 
-    # ── photo / recording ────────────────────────────────────────────────────
+    # ── photo / recording / live view ────────────────────────────────────────
 
     def take_photo(self):
-        frame = self.tello.get_frame_read().frame
+        frame = self._frame_reader.frame
         if frame is None:
             print("No frame available")
             return
-        import cv2
         path = os.path.join(PHOTOS_DIR, f"tello_{ts()}.jpg")
         cv2.imwrite(path, frame)
         print(f"📷 Saved: {path}")
@@ -147,9 +216,7 @@ class TelloCompanion:
 
     def _start_recording(self):
         path = os.path.join(RECORDINGS_DIR, f"tello_{ts()}.mp4")
-        frame_reader = self.tello.get_frame_read()
 
-        import cv2
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self._video_writer = cv2.VideoWriter(path, fourcc, 30, (960, 720))
         self.recording = True
@@ -157,7 +224,7 @@ class TelloCompanion:
 
         def _record():
             while self.recording:
-                frame = frame_reader.frame
+                frame = self._frame_reader.frame
                 if frame is not None:
                     self._video_writer.write(frame)
                 time.sleep(1 / 30)
@@ -173,6 +240,12 @@ class TelloCompanion:
         if hasattr(self, "_video_writer"):
             self._video_writer.release()
         print(f"⏹ Saved: {self._rec_path}")
+
+    def toggle_video_display(self):
+        self.video_display = not self.video_display
+        if not self.video_display:
+            cv2.destroyWindow(VIDEO_WINDOW)
+        print(f"{'▶' if self.video_display else '⏸'} Video display {'on' if self.video_display else 'off'}")
 
     # ── RC control loop ──────────────────────────────────────────────────────
 
@@ -198,31 +271,50 @@ class TelloCompanion:
         except Exception:
             return 0.0
 
+    def fire(self, action):
+        if action == "start":    self.arm()
+        elif action == "select": self.emergency()
+        elif action == "l2":     self.takeoff()
+        elif action == "l1":     self.land()
+        elif action == "r1":     self.toggle_recording()
+        elif action == "r2":     self.take_photo()
+        elif action == "a":      self.toggle_video_display()
+        elif action == "y":      self.flip("f")
+        elif action == "x":      self.flip("l")
+        elif action == "b":      self.flip("r")
+
     def run(self):
         pygame.init()
         pygame.joystick.init()
 
         if pygame.joystick.get_count() == 0:
             print("No gamepad found — keyboard fallback not implemented")
-            print("Plug in your 8BitDo and restart")
+            print("Plug in your gamepad and restart")
             self.tello.end()
             return
 
         joy = pygame.joystick.Joystick(0)
         joy.init()
+        profile_name, profile = pick_profile(joy.get_name())
+        idx_to_action = {v: k for k, v in profile["buttons"].items()}
+        axis_to_action = {v: k for k, v in profile["trigger_axes"].items()}
+
         print(f"Gamepad: {joy.get_name()}")
+        if profile_name:
+            print(f"Control profile: {profile_name}")
+        else:
+            print("⚠ No matching control profile — using default (8bitdo) mapping.")
+            print("  If buttons feel wrong, run `python3 tello_companion.py --discover`")
+            print("  to find this pad's real indices and add a profile for it.")
         print("Controls: Start=Arm  L2=Takeoff  L1=Land  Select=Emergency")
         print("          R2=Photo   R1=Record   A=Video  SPD: DpadUp/Down")
 
-        # Track button press edges (avoid repeat)
-        prev_buttons = {}
-
         # Enable Tello video
         self.tello.streamon()
+        self._frame_reader = self.tello.get_frame_read()
         self.start_rc()
 
         clock = pygame.time.Clock()
-        scale = lambda v: clamp(v * SPEED_STEPS[self.speed_idx])
 
         try:
             while True:
@@ -231,24 +323,21 @@ class TelloCompanion:
                         return
 
                     if event.type == pygame.JOYBUTTONDOWN:
-                        btn = event.button
-                        # 8BitDo Zero 2 / Ultimate / Pro 2 button indices (XInput mode)
-                        # A=0 B=1 X=2 Y=3 L1=4 R1=5 L2=6 R2=7 Select=8 Start=9
-                        if btn == 9:   self.arm()
-                        elif btn == 6: self.takeoff()          # L2
-                        elif btn == 4: self.land()             # L1
-                        elif btn == 5: self.toggle_recording() # R1
-                        elif btn == 7: self.take_photo()       # R2
-                        elif btn == 8: self.emergency()        # Select
-                        elif btn == 0: self.flip("f")          # A → flip forward
-                        elif btn == 3: self.flip("f")          # Y
-                        elif btn == 2: self.flip("l")          # X
-                        elif btn == 1: self.flip("r")          # B
+                        action = idx_to_action.get(event.button)
+                        if action:
+                            self.fire(action)
 
                     if event.type == pygame.JOYHATMOTION:
                         hx, hy = event.value
-                        if hy == 1:  self.cycle_speed(1)   # D-pad up
-                        elif hy == -1: self.cycle_speed(-1) # D-pad down
+                        if hy == 1:    self.cycle_speed(1)    # D-pad up
+                        elif hy == -1: self.cycle_speed(-1)   # D-pad down
+
+                # Trigger axes (pads that report L2/R2 as analog triggers, not buttons)
+                for axis_idx, action in axis_to_action.items():
+                    pulled = self._axis(joy, axis_idx) > TRIGGER_THRESH
+                    if pulled and not self._trigger_prev.get(action):
+                        self.fire(action)
+                    self._trigger_prev[action] = pulled
 
                 # Read sticks
                 # Axis layout (XInput): 0=LX 1=LY 2=RX 3=RY 4=LT 5=RT
@@ -265,6 +354,12 @@ class TelloCompanion:
                     clamp(lx  * spd),   # yaw
                 ]
 
+                if self.video_display:
+                    frame = self._frame_reader.frame
+                    if frame is not None:
+                        cv2.imshow(VIDEO_WINDOW, frame)
+                    cv2.waitKey(1)
+
                 clock.tick(RC_HZ)
 
         except KeyboardInterrupt:
@@ -276,6 +371,7 @@ class TelloCompanion:
             self.stop_rc()
             if self.recording:
                 self._stop_recording()
+            cv2.destroyAllWindows()
             self.tello.streamoff()
             self.tello.end()
             pygame.quit()
@@ -284,6 +380,9 @@ class TelloCompanion:
 # ── entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    companion = TelloCompanion()
-    companion.connect()
-    companion.run()
+    if "--discover" in sys.argv:
+        discover_buttons()
+    else:
+        companion = TelloCompanion()
+        companion.connect()
+        companion.run()

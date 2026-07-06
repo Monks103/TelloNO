@@ -75,7 +75,19 @@ pip install -r requirements.txt
 python3 tello_companion.py
 ```
 
-Same gamepad mapping as the app. Photos and recordings saved locally.
+Same gamepad mapping as the app. Photos and recordings saved locally. Press **A** to
+open a live video window (handy for feeding an HDMI-in FPV headset from your laptop's
+display output).
+
+Button mapping is per-controller (see `CONTROLLER_PROFILES` in `tello_companion.py`) —
+an 8BitDo profile ships by default. If your pad's buttons don't line up (common on
+handhelds with a built-in controller, e.g. GPD Win Max), run:
+
+```bash
+python3 tello_companion.py --discover
+```
+
+and press each button to see its real index, then add a profile for it.
 
 ---
 
