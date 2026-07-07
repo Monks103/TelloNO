@@ -74,6 +74,19 @@ CONTROLLER_PROFILES = {
         },
         "trigger_axes": {},
     },
+    # GPD Win Max built-in controller — reports its name as plain "Controller",
+    # so this key is deliberately generic (matched by substring, see pick_profile).
+    "controller": {
+        "buttons": {
+            "start": 6, "select": 7,
+            "l1": 4, "r1": 5,
+            "l3": 8, "r3": 9,
+            "a": 0, "b": 1, "x": 2, "y": 3,
+        },
+        "trigger_axes": {
+            "l2": 4, "r2": 5,
+        },
+    },
 }
 DEFAULT_PROFILE_NAME = "8bitdo"
 
@@ -199,8 +212,16 @@ class TelloCompanion:
 
     # ── photo / recording / live view ────────────────────────────────────────
 
-    def take_photo(self):
+    def _get_frame(self):
+        # djitellopy hands back RGB (PIL Image.to_image() under the hood),
+        # but cv2.imshow/imwrite/VideoWriter all expect BGR — convert once here.
         frame = self._frame_reader.frame
+        if frame is None:
+            return None
+        return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+    def take_photo(self):
+        frame = self._get_frame()
         if frame is None:
             print("No frame available")
             return
@@ -224,7 +245,7 @@ class TelloCompanion:
 
         def _record():
             while self.recording:
-                frame = self._frame_reader.frame
+                frame = self._get_frame()
                 if frame is not None:
                     self._video_writer.write(frame)
                 time.sleep(1 / 30)
@@ -355,7 +376,7 @@ class TelloCompanion:
                 ]
 
                 if self.video_display:
-                    frame = self._frame_reader.frame
+                    frame = self._get_frame()
                     if frame is not None:
                         cv2.imshow(VIDEO_WINDOW, frame)
                     cv2.waitKey(1)
